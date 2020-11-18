@@ -90,6 +90,79 @@ class Bird:
         return pygame.mask.from_surface(self.img)
 
 
+# -------------- Pipe Class --------------
+class Pipe:
+    GAP = 200
+    VELOCITY = 5
+
+    def __init__(self, x):
+        self.x = x
+        self.height = 0
+        self.gap = self.GAP
+
+        self.top = 0
+        self.bottom = 0
+        self.PIPE_TOP = pygame.transform.flip(PIPE_IMAGE, False, True)
+        self.PIPE_BOTTOM = PIPE_IMG
+
+        # If Bird Has Already Passed by Pipe
+        self.passed = False
+        self.setHeight()
+
+    def setHeight():
+        self.height = random.randrange(50, 450)
+        self.top    = self.height - self.PIPE_TOP.get_height()
+        self.bottom = self.height + self.GAP
+
+    def move(self):
+        self.x -= self.VELOCITY
+
+    def draw(self, window):
+        window.blit(self.PIPE_TOP, (self.x, self.top))
+        window.blit(self.PIPE_BOTTOM, (self.x, self.bottom))
+
+    def collide(self, bird):
+        bird_mask = bird.get_mask()
+        top_pipe_mask = pygame.mask.from_surface(self.PIPE_TOP)
+        bottom_pipe_mask = pygame.mask.from_surface(self.PIPE_BOTTOM)
+        
+        top_offset = (self.x - bird.x, self.top - round(bird.y))
+        bottom_offset = (self.x - bird.x, self.bottom - round(bird.y))
+
+        bottom_point = bird_mask.overlap(bottom_mask, bottom_offset)
+        top_point = bird_mask.overlap(top_mask, top_offset)
+
+        if top_point or bottom_point:
+            return True
+        return False
+
+
+# -------------- Base Class --------------
+class Base:
+    VELOCITY = 5
+    WIDTH = BASE_IMAGE.get_width()
+    IMG = BASE_IMAGE
+
+    def __init__(self, y):
+        self.y = y
+        self.x1 = 0
+        self.x2 = self.WIDTH
+
+    def move(self):
+        self.x1 -= self.VELOCITY
+        self.x2 -= self.VELOCITY
+
+        if self.x1 + self.WIDTH < 0:
+            self.x1 = self.x2 + self.WIDTH
+
+        if self.x2 + self.WIDTH < 0:
+            self.x2 = self.x1 + self.WIDTH
+
+    def draw(self, window):
+        window.blit(self.IMG, (self.x1, self.y))
+        window.blit(self.IMG, (self.x2, self.y))
+
+# ------------ PyGame Functions ------------
 def draw_window(win, bird):
     win.blit(BACKGROUND_IMAGE, (0, 0))
     bird.draw(win)
@@ -108,7 +181,7 @@ def main():
             if event.type == pygame.QUIT:
                 run = False
 
-        # bird.move()
+        bird.move()
         draw_window(window, bird)
 
     pygame.quit()
