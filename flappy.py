@@ -8,6 +8,8 @@ import time
 import os
 import random
 
+pygame.font.init()
+
 # ------------ Constants ------------
 WINDOW_WIDTH = 500
 WINDOW_HEIGHT = 800
@@ -20,6 +22,7 @@ PIPE_IMAGE = pygame.transform.scale2x(pygame.image.load(os.path.join("imgs", "pi
 BASE_IMAGE = pygame.transform.scale2x(pygame.image.load(os.path.join("imgs", "base.png")))
 BACKGROUND_IMAGE = pygame.transform.scale2x(pygame.image.load(os.path.join("imgs", "bg.png")))
 
+STAT_FONT = pygame.font.SysFont("comicsans", 50)
 
 # ------------ Bird Class ------------
 class Bird:
@@ -103,13 +106,13 @@ class Pipe:
         self.top = 0
         self.bottom = 0
         self.PIPE_TOP = pygame.transform.flip(PIPE_IMAGE, False, True)
-        self.PIPE_BOTTOM = PIPE_IMG
+        self.PIPE_BOTTOM = PIPE_IMAGE
 
         # If Bird Has Already Passed by Pipe
         self.passed = False
         self.setHeight()
 
-    def setHeight():
+    def setHeight(self):
         self.height = random.randrange(50, 450)
         self.top    = self.height - self.PIPE_TOP.get_height()
         self.bottom = self.height + self.GAP
@@ -129,8 +132,8 @@ class Pipe:
         top_offset = (self.x - bird.x, self.top - round(bird.y))
         bottom_offset = (self.x - bird.x, self.bottom - round(bird.y))
 
-        bottom_point = bird_mask.overlap(bottom_mask, bottom_offset)
-        top_point = bird_mask.overlap(top_mask, top_offset)
+        bottom_point = bird_mask.overlap(bottom_pipe_mask, bottom_offset)
+        top_point = bird_mask.overlap(top_pipe_mask, top_offset)
 
         if top_point or bottom_point:
             return True
@@ -163,16 +166,29 @@ class Base:
         window.blit(self.IMG, (self.x2, self.y))
 
 # ------------ PyGame Functions ------------
-def draw_window(win, bird):
+def draw_window(win, bird, pipes, base, score):
     win.blit(BACKGROUND_IMAGE, (0, 0))
+    
+    for pipe in pipes:
+        pipe.draw(win)
+
+    text = STAT_FONT.render("Score: " + str(score), 1, (255,255,255))
+    win.blit(text, (WINDOW_WIDTH - 10 - text.get_width(), 10))
+
+    base.draw(win)
     bird.draw(win)
     pygame.display.update()
 
 
 def main():
-    bird = Bird(200, 200)
+    bird = Bird(230, 350)
+    pipes = [Pipe(600)]
+    base = Base(730)
+
     window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     clock = pygame.time.Clock()
+
+    score = 0
 
     run = True
     while run:
@@ -181,11 +197,54 @@ def main():
             if event.type == pygame.QUIT:
                 run = False
 
-        bird.move()
-        draw_window(window, bird)
+        #bird.move()
+        add_pipe = False
+        rem = []
+        for pipe in pipes:
+            # End Game if Collision
+            if pipe.collide(bird):
+                pass
+
+            # Pipe is Off Screen
+            if pipe.x + pipe.PIPE_TOP.get_width() < 0:
+                rem.append(pipe)
+
+            if not pipe.passed and pipe.x < bird.x:
+                pipe.passed = True
+                add_pipe = True
+
+            pipe.move()
+
+        # Add Passed Pipe to Score, Add New Pipe to Draw
+        if add_pipe:
+            score += 1
+            pipes.append(Pipe(600))
+
+        for r in rem:
+            pipes.remove(r)
+
+        # Check if hit the ground
+        if bird.y + bird.img.get_height() >= 730:
+            pass
+
+
+        base.move()
+        draw_window(window, bird, pipes, base, score)
 
     pygame.quit()
     quit()
 
-
+# Main Execution
 main()
+
+def run(config_path):
+    config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                    neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                    config_path)
+
+if __name__ == "__main__":
+    local_directory = os.path.dirname(__file__)
+    config_path = os.path.join(local_directory, "config-feedforward.txt")
+    run(config_path)
+
+
