@@ -49,10 +49,10 @@ class Bird:
 
     def move(self):
         self.tick_count += 1
-        d = (self.velocity * self.tick_count) + 1.5 * self.tick_count ** 2
+        d = (self.velocity * self.tick_count) + 1.5*(self.tick_count)**2
 
         if d >= 16:
-            d = 16
+            d = (d/abs(d)) * 16
         if d < 0:
             d -= 2
         self.y += d
@@ -68,13 +68,13 @@ class Bird:
     def draw(self, window):
         self.img_count += 1
 
-        if self.img_count < self.ANIMATION_TIME:
+        if self.img_count <= self.ANIMATION_TIME:
             self.img = self.IMAGES[0]
-        elif self.img_count < self.ANIMATION_TIME * 2:
+        elif self.img_count <= self.ANIMATION_TIME * 2:
             self.img = self.IMAGES[1]
-        elif self.img_count < self.ANIMATION_TIME * 3:
+        elif self.img_count <= self.ANIMATION_TIME * 3:
             self.img = self.IMAGES[2]
-        elif self.img_count < self.ANIMATION_TIME * 4:
+        elif self.img_count <= self.ANIMATION_TIME * 4:
             self.img = self.IMAGES[1]
         elif self.img_count == self.ANIMATION_TIME * 4 + 1:
             self.img = self.IMAGES[0]
@@ -83,7 +83,7 @@ class Bird:
         # When Nose-Dive, Do Not Flap
         if self.tilt <= -80:
             self.img = self.IMAGES[1]
-            self.img_count = self.ANIMATION_TIME * 2
+            self.img_count = self.ANIMATION_TIME*2
 
         rotated_image = pygame.transform.rotate(self.img, self.tilt)
         new_rect = rotated_image.get_rect(center=self.img.get_rect(topleft=(self.x, self.y)).center)
@@ -166,7 +166,7 @@ class Base:
         window.blit(self.IMG, (self.x2, self.y))
 
 # ------------ PyGame Functions ------------
-def draw_window(win, bird, pipes, base, score):
+def draw_window(win, birds, pipes, base, score):
     win.blit(BACKGROUND_IMAGE, (0, 0))
     
     for pipe in pipes:
@@ -176,12 +176,27 @@ def draw_window(win, bird, pipes, base, score):
     win.blit(text, (WINDOW_WIDTH - 10 - text.get_width(), 10))
 
     base.draw(win)
-    bird.draw(win)
+
+    for bird in birds:
+        bird.draw(win)
+
     pygame.display.update()
 
 
-def main():
-    bird = Bird(230, 350)
+def main_eval_genome(genomes, config):
+    neural_nets = []
+    ge = []
+    birds = []
+
+    # Genomes is tuple of genome ID, genome OBJ
+    for _, g in genomes:
+        net = neat.nn.FeedForwardNetwork.create(g, config)
+        neural_nets.append(net)
+        birds.append(Bird(230, 350))
+        g.fitness = 0
+        ge.append(g)
+
+
     pipes = [Pipe(600)]
     base = Base(730)
 
@@ -191,19 +206,44 @@ def main():
     score = 0
 
     run = True
-    while run:
+    while run and len(birds) > 0:
         clock.tick(30)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
+                pygame.quit()
+                quit()
+
+        pipe_ind = 0
+        if len(birds) > 0:
+            if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():
+                pipe_ind = 1
+        else:
+            run = False
+            break
+
+        for x, bird in enumerate(birds):
+            ge[x].fitness += 0.1
+            bird.move()
+
+            output = neural_nets[x].activate((bird.y, 
+                abs(bird.y - pipes[pipe_ind].height), 
+                abs(bird.y - pipes[pipe_ind].bottom)))
+
+            if output[0] > 0.5:
+                bird.jump()
 
         #bird.move()
         add_pipe = False
         rem = []
         for pipe in pipes:
-            # End Game if Collision
-            if pipe.collide(bird):
-                pass
+            for x, bird in enumerate(birds):
+                # End Game if Collision
+                if pipe.collide(bird):
+                    ge[x].fitness -= 1
+                    birds.pop(x)
+                    neural_nets.pop(x)
+                    ge.pop(x)
 
             # Pipe is Off Screen
             if pipe.x + pipe.PIPE_TOP.get_width() < 0:
@@ -218,29 +258,44 @@ def main():
         # Add Passed Pipe to Score, Add New Pipe to Draw
         if add_pipe:
             score += 1
+            
+            # Boost Fitness Score for All Birds
+            for g in ge:
+                g.fitness += 5
+
             pipes.append(Pipe(600))
 
         for r in rem:
             pipes.remove(r)
 
-        # Check if hit the ground
-        if bird.y + bird.img.get_height() >= 730:
-            pass
+        for x, bird in enumerate(birds):
+            # Check if hit the ground
+            if bird.y + bird.img.get_height() >= 730 or bird.y < 0:
+                birds.pop(x)
+                neural_nets.pop(x)
+                ge.pop(x)
 
 
         base.move()
-        draw_window(window, bird, pipes, base, score)
+        draw_window(window, birds, pipes, base, score)
 
-    pygame.quit()
-    quit()
-
-# Main Execution
-main()
 
 def run(config_path):
     config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
                     neat.DefaultSpeciesSet, neat.DefaultStagnation,
                     config_path)
+
+    # Create a Population
+    population = neat.Population(config)
+
+    # Optional Stats Reporters
+    population.add_reporter(neat.StdOutReporter(True))
+    stats = neat.StatisticsReporter()
+    population.add_reporter(stats)
+
+    # Run Main Fitness Function 50 Times
+    winner = population.run(main_eval_genome, 50)
+
 
 if __name__ == "__main__":
     local_directory = os.path.dirname(__file__)
